@@ -240,7 +240,23 @@ class Fetcher():
         
         return col_names
 
-    
+        #SHODOR FIX FUNCTION
+    def stripTokenList(self, tokenList):
+
+        def find_nth(haystack, needle, n):
+            start = haystack.find(needle)
+            while start >= 0 and n > 1:
+                start = haystack.find(needle, start + len(needle))
+                n -= 1
+            return start
+
+        newTokenList = []
+        for token in tokenList:
+            idx = find_nth(token, "!", 3)
+            token = "!!" + token[idx:]    
+            newTokenList.append(token)
+        return newTokenList
+
     def fetchRecords(self):
         '''
         Generator to fetch all records using a resumptionToken if supplied.
@@ -265,6 +281,14 @@ class Fetcher():
         f = StringIO(body)
         tree = etree.parse(f)
         tokenList = tree.xpath("oai:ListRecords/oai:resumptionToken/text()", namespaces=self.namespaces)
+        
+        #SHODOR LOG
+        for token in tokenList:
+            log.info('TOKEN: %s' % token)
+        
+        #SHODOR FIX
+        tokenList = self.stripTokenList(tokenList)
+
         yield tree.xpath("oai:ListRecords/oai:record", namespaces=self.namespaces)
                 
         while (len(tokenList) == 1):
@@ -275,6 +299,13 @@ class Fetcher():
                 tree = etree.parse(f)
                 yield tree.xpath("oai:ListRecords/oai:record", namespaces=self.namespaces)
                 tokenList = tree.xpath("oai:ListRecords/oai:resumptionToken/text()", namespaces=self.namespaces)
+            
+                #SHODOR LOG
+                for token in tokenList:
+                    log.info('TOKEN: %s' % token)
+
+                #SHODOR FIX
+                tokenList = self.stripTokenList(tokenList)
             except:
                 tokenList = []
                 log.exception("Problem trying to get next segment.")
@@ -289,8 +320,22 @@ class Fetcher():
         }
         if credentials is not None:
             headers['Authorization'] = 'Basic ' + credentials.strip()
+        
+        #SHODOR FIX
+        def replace_all(text, dic):
+            for i,j in dic.iteritems():
+                text = text.replace(i,j)
+            return text
+
+        replaceDict ={
+                      "%3A" : ":",
+                      "%21" : "!"
+        }
+
+        encoded = replace_all(urlencode(kw), replaceDict)
+
         request = urllib2.Request(
-            "{url}?{query}".format(url=base_url, query=urlencode(kw)), headers=headers)
+            "{url}?{query}".format(url=base_url, query=encoded), headers=headers)
         log.debug("URL Requested: %s", request.get_full_url())
         return self.retrieveFromUrlWaiting(request)
     
